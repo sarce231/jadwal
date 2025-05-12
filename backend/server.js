@@ -1,6 +1,6 @@
+// backend/server.js
 import express from 'express';
 import http from 'http';
-import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
@@ -8,28 +8,29 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { initSocket } from './socket/socket.js'; // ✅ Pastikan path sesuai folder
 
-// Konversi __dirname di ES Module
+// Konversi __dirname untuk ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env
+// Load environment variables
 dotenv.config();
 
 const app = express();
-const server = http.createServer(app);
+const server = http.createServer(app); // 🔧 Socket.IO butuh HTTP server
 
 // Middleware CORS
 app.use(cors({
-  origin: 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  origin: 'http://localhost:5173', // sesuaikan dengan frontend-mu
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
 app.use(express.json());
 
-// Setup folder uploads
+// Setup uploads folder
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
@@ -41,18 +42,17 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 app.use('/uploads', express.static(uploadDir));
 
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB is Connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// Connect ke MongoDB
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch((err) => console.error('❌ MongoDB error:', err));
 
-// Model Chat
-import Chat from './models/Chat.js';
-
-// Routes
+// Import model & routes
 import chatRoutes from './routes/chatRoutes.js';
 import scheduleRoutes from './routes/schedule.js';
-// import notificationRoutes from './routes/notificationRoutes.js';
 import mediaRoutes from './routes/mediaRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import authRoutes from './routes/authRoutes.js';
@@ -60,72 +60,25 @@ import userRoutes from './routes/userRoutes.js';
 
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/chats', chatRoutes);
-// app.use('/api/notifications', notificationRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
-// Error Handling
-app.use((req, res, next) => {
+// 404 & Error Handler
+app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('❌ Error:', err);
   res.status(500).json({ message: 'Internal Server Error' });
 });
 
-// === Socket.IO Real-Time ===
-export const io = new Server(server, {
-  cors: {
-    origin: 'http://localhost:5173',
-    methods: ['GET', 'POST']
-  }
-});
+// ✅ Inisialisasi Socket.IO
+initSocket(server);
 
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-
-  Chat.findOne({ name: 'default' })
-    .then(chat => {
-      console.log("Sending initial messages:", chat?.messages?.length || 0);
-      socket.emit('initialMessages', chat?.messages || []);
-    })
-    .catch(err => {
-      console.error("Error fetching initial messages:", err);
-      socket.emit('initialMessages', []);
-    });
-
-  socket.on('sendMessage', (msg) => {
-    const message = {
-      sender: msg.sender,
-      userName: msg.userName,
-      text: msg.text,
-      timestamp: new Date().toISOString()
-    };
-
-    Chat.findOneAndUpdate(
-      { name: 'default' },
-      { $push: { messages: message } },
-      { new: true, upsert: true }
-    )
-      .then(chat => {
-        console.log('Message saved, emitting to clients:', message);
-        io.emit('newMessage', message);
-      })
-      .catch(err => {
-        console.error('Error saving message:', err);
-        socket.emit('messageError', 'Failed to send message');
-      });
-  });
-
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-  });
-});
-
-// Start Server
+// ✅ Start server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

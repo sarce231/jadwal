@@ -1,30 +1,58 @@
-// src/components/AdminChat.js
-import React, { useEffect, useState, useRef } from 'react';
-import socket from '../socket';  // Mengimpor koneksi WebSocket
+import { useEffect, useState, useRef } from 'react';
+import io from 'socket.io-client';
+
+const socket = io('http://localhost:5000', { transports: ['websocket'] });
 
 const AdminChat = () => {
   const [messages, setMessages] = useState([]);
   const [reply, setReply] = useState('');
   const [hasNewMessage, setHasNewMessage] = useState(false);
-
   const messagesEndRef = useRef(null);
   const chatBoxRef = useRef(null);
 
   const senderName = localStorage.getItem('userName') || 'Admin';
 
+  // ✅ Reload otomatis setiap kali admin membuka halaman chat
+  useEffect(() => {
+    if (!sessionStorage.getItem('reloadedChat')) {
+      sessionStorage.setItem('reloadedChat', 'true');
+      window.location.reload();
+    }
+  }, []);
+
+  // 🔁 Bersihkan flag saat keluar dari halaman agar reload terjadi lagi nanti
+  useEffect(() => {
+    return () => {
+      sessionStorage.removeItem('reloadedChat');
+    };
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('chatOpen', 'true');
 
-    socket.on('initialMessages', handleInitialMessages);
-    socket.on('newMessage', handleNewMessage);
-    socket.on('deletedMessage', handleDeletedMessage);
+    socket.on('initialMessages', (data) => {
+      setMessages(data);
+    });
+
+    socket.on('newMessage', (data) => {
+      setMessages((prevMessages) => [...prevMessages, data]);
+      if (data.sender === 'user') {
+        setHasNewMessage(true);
+        socket.emit('new-comment', data);
+      }
+    });
+
+    socket.on('deletedMessage', (messageId) => {
+      setMessages((prevMessages) =>
+        prevMessages.filter((message) => message._id !== messageId)
+      );
+    });
 
     return () => {
       localStorage.setItem('chatOpen', 'false');
-
-      socket.off('initialMessages', handleInitialMessages);
-      socket.off('newMessage', handleNewMessage);
-      socket.off('deletedMessage', handleDeletedMessage);
+      socket.off('initialMessages');
+      socket.off('newMessage');
+      socket.off('deletedMessage');
     };
   }, []);
 
@@ -32,50 +60,26 @@ const AdminChat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleInitialMessages = (data) => {
-    setMessages(data);
-  };
-
-  const handleNewMessage = (data) => {
-    setMessages((prev) => [...prev, data]);
-    if (data.sender === 'user') {
-      setHasNewMessage(true);
-      socket.emit('new-comment', data);
-    }
-  };
-
-  const handleDeletedMessage = (messageId) => {
-    setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
-  };
-
   const handleScroll = () => {
     const isAtBottom =
-      chatBoxRef.current.scrollTop + chatBoxRef.current.clientHeight >=
-      chatBoxRef.current.scrollHeight - 10;
-
+      chatBoxRef.current.scrollHeight ===
+      chatBoxRef.current.scrollTop + chatBoxRef.current.clientHeight;
     if (isAtBottom) {
       setHasNewMessage(false);
     }
   };
 
-  const handleInputChange = (e) => {
-    setReply(e.target.value);
-    setHasNewMessage(false);
-  };
-
   const sendReply = () => {
     if (!reply.trim()) return;
 
-    const newMessage = {
+    const message = {
       sender: 'admin',
       userName: senderName,
       text: reply,
       timestamp: new Date().toISOString(),
-      id: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, newMessage]);
-    socket.emit('sendMessage', newMessage);
+    socket.emit('sendMessage', message);
     setReply('');
     setHasNewMessage(false);
   };
@@ -101,24 +105,24 @@ const AdminChat = () => {
           padding: '10px',
         }}
       >
-        {messages.map((msg) => (
+        {messages.map((message) => (
           <div
-            key={msg.id}
+            key={message._id}
             style={{
               marginBottom: '10px',
-              textAlign: msg.sender === 'admin' ? 'right' : 'left',
+              textAlign: message.sender === 'admin' ? 'right' : 'left',
             }}
           >
             <p>
               <strong>
-                {msg.userName || (msg.sender === 'admin' ? 'Admin' : 'User')}:
-              </strong>{' '}
-              {msg.text}
+                {message.userName || (message.sender === 'admin' ? 'Admin' : 'User')}
+              </strong>
+              : {message.text}
             </p>
-            <small>{new Date(msg.timestamp).toLocaleTimeString()}</small>
-            {msg.sender === 'admin' && (
+            <small>{new Date(message.timestamp).toLocaleTimeString()}</small>
+            {message.sender === 'admin' && (
               <button
-                onClick={() => deleteMessage(msg.id)}
+                onClick={() => deleteMessage(message._id)}
                 style={{
                   marginLeft: '10px',
                   padding: '5px',
@@ -138,7 +142,7 @@ const AdminChat = () => {
       <input
         type="text"
         value={reply}
-        onChange={handleInputChange}
+        onChange={(e) => setReply(e.target.value)}
         placeholder="Balas komentar..."
         style={{ width: '100%', padding: '10px', marginTop: '10px' }}
       />

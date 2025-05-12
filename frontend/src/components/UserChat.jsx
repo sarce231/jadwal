@@ -8,19 +8,40 @@ const UserChat = ({ onNewMessage }) => {
   const [msg, setMsg] = useState('');
   const [userName, setUserName] = useState('');
 
+  // ✅ Auto reload saat pertama masuk halaman chat
+  useEffect(() => {
+    if (!sessionStorage.getItem('userChatReloaded')) {
+      sessionStorage.setItem('userChatReloaded', 'true');
+      window.location.reload();
+    }
+  }, []);
+
+  // 🔁 Hapus flag saat keluar dari halaman agar reload bisa terjadi lagi nanti
+  useEffect(() => {
+    return () => {
+      sessionStorage.removeItem('userChatReloaded');
+    };
+  }, []);
+
   useEffect(() => {
     const userInfo = JSON.parse(localStorage.getItem('userInfo'));
     if (userInfo?.name) setUserName(userInfo.name);
 
+    socket.on('connect', () => {
+      console.log('Socket connected:', socket.id);
+    });
+
     socket.on('initialMessages', (data) => {
-      setMessages(data);
+      if (data.length === 0) {
+        setMessages([{ userName: 'System', text: 'Belum ada pesan.' }]);
+      } else {
+        setMessages(data);
+      }
     });
 
     socket.on('newMessage', (data) => {
       setMessages((prev) => [...prev, data]);
-
       if (data.sender === 'admin') {
-        // ⬇️ Kirim sinyal ke parent/sidebar bahwa ada balasan baru
         if (onNewMessage) onNewMessage();
       }
     });
@@ -41,7 +62,6 @@ const UserChat = ({ onNewMessage }) => {
       timestamp: new Date().toISOString(),
     };
 
-    // ⛔ Jangan setMessages langsung — biarkan socket yang broadcast
     socket.emit('sendMessage', message);
     setMsg('');
   };

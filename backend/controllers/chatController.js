@@ -1,4 +1,3 @@
-import { io } from '../server.js'; // Sesuaikan dengan jalur file server.js Anda
 import Chat from '../models/Chat.js'; // Sesuaikan dengan model Chat Anda
 
 // Endpoint untuk mendapatkan semua chat
@@ -25,11 +24,9 @@ export const sendMessage = async (req, res) => {
       { new: true, upsert: true }
     );
 
-    console.log('Message saved, emitting to clients:', message);
+    console.log('Message saved, but not emitting in controller');
 
-    // Kirim pesan ke semua klien melalui socket.io
-    io.emit('newMessage', message);  // Emit pesan ke semua klien
-
+    // Kirim response ke client
     res.status(200).json(chat);
   } catch (err) {
     console.error("Error saving message:", err);
@@ -40,7 +37,7 @@ export const sendMessage = async (req, res) => {
 // Endpoint untuk menghapus pesan
 export const deleteMessage = async (req, res) => {
   try {
-    const { messageId } = req.body; // Mengambil ID pesan yang ingin dihapus
+    const { messageId } = req.body;
 
     // Menghapus pesan dari database
     const chat = await Chat.findOneAndUpdate(
@@ -53,11 +50,9 @@ export const deleteMessage = async (req, res) => {
       return res.status(404).json({ message: "Chat tidak ditemukan" });
     }
 
-    console.log('Message deleted, emitting to clients:', messageId);
+    console.log('Message deleted, but not emitting in controller');
 
-    // Emit event ke semua klien untuk menghapus pesan
-    io.emit('deletedMessage', messageId); // Emit event 'deletedMessage' untuk memberi tahu klien
-
+    // Kirim response ke client
     res.status(200).json(chat);
   } catch (err) {
     console.error("Error deleting message:", err);
