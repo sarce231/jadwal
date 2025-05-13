@@ -18,11 +18,11 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 
 const app = express();
-const server = http.createServer(app); // 🔧 Socket.IO butuh HTTP server
+const server = http.createServer(app); // 
 
 // Middleware CORS
 app.use(cors({
-  origin: 'http://localhost:5173', // sesuaikan dengan frontend-mu
+  origin: ['http://localhost:5173', 'https://your-app.vercel.app'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -64,6 +64,10 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+
+app.get('/', (req, res) => {
+  res.send('🚀 Backend API is running!');
+});
 
 // 404 & Error Handler
 app.use((req, res) => {
